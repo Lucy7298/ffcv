@@ -23,8 +23,9 @@ def from_shard(shard, pipeline):
     # (Webdataset is an optional depdency)
     from webdataset import WebDataset
 
-    dataset = WebDataset(shard)
-    dataset = pipeline(dataset)
+    # dataset = WebDataset(shard)
+    print(shard)
+    dataset = pipeline(shard)
     return dataset
 
 def count_samples_in_shard(shard, pipeline):
