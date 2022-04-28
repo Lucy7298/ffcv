@@ -247,7 +247,7 @@ class Graph:
                 field = self.handlers[spec.source]
                 Decoder = field.get_decoder_class()
                 spec.accept_decoder(Decoder, output_name)
-
+                
         # registering nodes
         for output_name, spec in pipeline_specs.items():
             if spec.source is None:

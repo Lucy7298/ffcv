@@ -1,6 +1,6 @@
 import numpy as np
 from time import sleep
-from os import SEEK_END
+from os import SEEK_END, getpid
 from multiprocessing import Value
 from .utils import align_to_page
 import ctypes
@@ -83,9 +83,16 @@ class MemoryAllocator():
         # We shouldn't have allocated a page and have nothing to write on it
         assert self.page_offset != 0
         # Wait until it's my turn to write
+
+        timeout_count = -1
         while self.next_page_written.value != self.my_page:
             # Essentially a spin lock
             # TODO we could replace it with like exponential backoff
+            timeout_count += 1 
+            if timeout_count == 1000: 
+                print("process id:", getpid(), 
+                      "next page:", self.next_page_written.value, 
+                      "my page:", self.my_page)
             sleep(0.001)
             pass
 

@@ -31,7 +31,7 @@ class PipelineSpec:
 
         if Decoder is not None:
             # The first element of the operations is a decoder
-            if self.transforms and isinstance(self.transforms[0], Decoder):
+            if self.transforms and "Decoder" in type(self.transforms[0]).__name__:
                 self.decoder = self.transforms.pop(0)
 
             elif self.decoder is None:

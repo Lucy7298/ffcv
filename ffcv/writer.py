@@ -14,6 +14,7 @@ from .fields.base import Field
 from .memory_allocator import MemoryAllocator
 from .types import (TYPE_ID_HANDLER, get_metadata_type, HeaderType,
                     FieldDescType, CURRENT_VERSION, ALLOC_TABLE_TYPE)
+import time
 
 
 MIN_PAGE_SIZE = 1 << 21  # 2MiB, which is the most common HugePage size
@@ -22,10 +23,10 @@ MAX_PAGE_SIZE = 1 << 32  # Biggest page size that will not overflow uint32
 def from_shard(shard, pipeline):
     # We import webdataset here so that it desn't crash if it's not required
     # (Webdataset is an optional depdency)
-    from webdataset import WebDataset
+    #from webdataset import WebDataset
 
-    dataset = WebDataset(shard)
-    dataset = pipeline(dataset)
+    #dataset = WebDataset(shard)
+    dataset = pipeline(shard)
     return dataset
 
 def count_samples_in_shard(shard, pipeline):
@@ -74,7 +75,7 @@ def worker_job_webdataset(input_queue, metadata_sm, metadata_type, fields,
                 # No more work left to do
                 break
 
-            shard, offset = todo
+            shard, offset, length = todo
 
             # For each sample in the chunk
             done = 0
@@ -85,6 +86,10 @@ def worker_job_webdataset(input_queue, metadata_sm, metadata_type, fields,
 
             # We warn the main thread of our progress
             with done_number.get_lock():
+                # t = time.localtime()
+                # current_time = time.strftime("%H:%M:%S", t)
+                #print(f"[{current_time}] shard {shard}: recorded {length}, processed {done}")
+                assert length == done, "different number recorded than processed"
                 done_number.value += done
 
     allocations_queue.put(allocator.allocations)
@@ -244,6 +249,9 @@ class DatasetWriter():
         # Wait for all the workers to be done
 
         # Display progress
+        # this progress bar is not helpful :/
+        # assert statement below should make sure total 
+        # number of samples is correct
         progress = tqdm(total=self.num_samples)
         previous = 0
         while previous != self.num_samples:
@@ -259,6 +267,9 @@ class DatasetWriter():
         for p in processes:
             content = allocations_queue.get()
             allocation_list.extend(content)
+
+        assert done_number.value == self.num_samples, \
+            f"number processed = {done_number.value}, number of samples = {self.num_samples}"
 
         self.finalize(allocation_list)
         self.metadata_sm.close()
@@ -297,8 +308,7 @@ class DatasetWriter():
         self._write_common(len(indices), chunks(indices, chunksize),
                            worker_job_indexed_dataset, (dataset, ))
 
-
-    def from_webdataset(self, shards: List[str], pipeline: Callable):
+    def from_webdataset(self, shards: List[str], pipeline: Callable, counts=None):
         """Read from webdataset-like format.
         See https://docs.ffcv.io/writing_datasets.html#webdataset for sample usage.
 
@@ -308,14 +318,20 @@ class DatasetWriter():
             List of shards that comprise the dataset folder.
         pipeline: Callable
             Called by each worker to decode. Similar to pipelines used to load webdataset.
+        counts: Dict
+            Mapping of shard to count in shard
         """
-        counter = partial(count_samples_in_shard, pipeline=pipeline)
-        lengths = thread_map(counter, shards, max_workers=self.num_workers)
+        if counts is None: 
+            counter = partial(count_samples_in_shard, pipeline=pipeline)
+            lengths = thread_map(counter, shards, max_workers=self.num_workers)
+        else: 
+            lengths = [counts[s] for s in shards]
         total_len = sum(lengths)
 
         offsets = np.cumsum([0] + lengths)[:-1]
 
-        todos = zip(shards, offsets)
+        todos = zip(shards, offsets, lengths)
+        assert len(shards) == len(offsets) == len(lengths), "shards, offsets, and lengths of unequal length"
         self._write_common(total_len, todos, worker_job_webdataset, (pipeline, ))
 
 

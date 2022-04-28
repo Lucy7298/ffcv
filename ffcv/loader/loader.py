@@ -15,6 +15,7 @@ from ffcv.fields.base import Field
 
 import torch as ch
 import numpy as np
+import copy
 
 from .epoch_iterator import EpochIterator
 from ..reader import Reader
@@ -102,7 +103,7 @@ class Loader:
                  batches_ahead: int = 3,
                  recompile: bool = False,  # Recompile at every epoch
                  ):
-
+        print(pipelines)
         if distributed and order == OrderOption.RANDOM and (seed is None):
             print('Warning: no ordering seed was specified with distributed=True. '
                   'Setting seed to 0 to match PyTorch distributed sampler.')
@@ -122,7 +123,7 @@ class Loader:
             'distributed': distributed,
             'seed': seed,
             'indices': indices,
-            'pipelines': pipelines,
+            'pipelines': copy.deepcopy(pipelines),
             'drop_last': drop_last,
             'batches_ahead': batches_ahead,
             'recompile': recompile
